@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine
-from sqlalchemy import sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
 engine = create_engine("postgresql://rupeeradar:rupeeradar123@localhost:5432/rupeeradar")
