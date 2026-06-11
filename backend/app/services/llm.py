@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 from typing import Optional, List
 
@@ -9,6 +11,20 @@ load_dotenv()
 api_key = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=api_key)
 
+_cache: dict = {}
+
+
+def _cache_key(current_rate, high_30d, low_30d, avg_30d, headlines, direction):
+    payload = {
+        "rate": round(float(current_rate), 2),
+        "high": round(float(high_30d), 2),
+        "low": round(float(low_30d), 2),
+        "avg": round(float(avg_30d), 2),
+        "headlines": sorted(headlines or []),
+        "direction": direction,
+    }
+    return hashlib.md5(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
 
 def get_recommendation(
     current_rate,
@@ -18,6 +34,10 @@ def get_recommendation(
     headlines: Optional[List[str]] = None,
     direction: str = "usd_to_inr",
 ):
+    key = _cache_key(current_rate, high_30d, low_30d, avg_30d, headlines, direction)
+    if key in _cache:
+        return _cache[key]
+
     headlines_section = ""
     headlines_instruction = ""
     if headlines:
@@ -66,4 +86,6 @@ REASON: The current rate is near its 30-day high, making this a favorable time t
         elif line.startswith("REASON:"):
             reasoning = line.replace("REASON:", "", 1).strip()
 
-    return {"verdict": verdict, "reasoning": reasoning}
+    result = {"verdict": verdict, "reasoning": reasoning}
+    _cache[key] = result
+    return result
