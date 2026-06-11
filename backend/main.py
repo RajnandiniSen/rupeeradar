@@ -283,6 +283,30 @@ def vibe_ui():
           font-weight: 700;
         }
 
+        .direction-toggle {
+          display: flex;
+          gap: 6px;
+          margin-bottom: 16px;
+        }
+
+        .dir-button {
+          min-height: 30px;
+          border: 1px solid rgba(34, 19, 22, 0.14);
+          border-radius: 999px;
+          padding: 0 13px;
+          color: var(--ink);
+          background: rgba(255,255,255,0.45);
+          font-size: 0.8rem;
+          font-weight: 850;
+          cursor: pointer;
+        }
+
+        .dir-button.active {
+          color: var(--pale);
+          background: var(--dark);
+          border-color: var(--dark);
+        }
+
         .chart-section {
           padding: 24px;
           background: var(--powder);
@@ -307,6 +331,30 @@ def vibe_ui():
           color: var(--muted);
           font-size: 0.82rem;
           font-weight: 850;
+        }
+
+        .range-controls {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 16px;
+        }
+
+        .range-button {
+          min-height: 34px;
+          border: 1px solid rgba(34, 19, 22, 0.14);
+          border-radius: 999px;
+          padding: 0 14px;
+          color: var(--ink);
+          background: var(--pastel-pink);
+          font-size: 0.82rem;
+          font-weight: 850;
+          cursor: pointer;
+        }
+
+        .range-button.active {
+          color: var(--pale);
+          background: var(--dark);
         }
 
         .chart-wrap {
@@ -341,10 +389,10 @@ def vibe_ui():
         .footer-panel span {
           display: block;
           max-width: 520px;
-          margin-top: 18px;
+          margin-top: 12px;
           color: rgba(255,248,216,0.78);
-          font-size: 0.9rem;
-          line-height: 1.5;
+          font-size: 0.85rem;
+          line-height: 1.4;
         }
 
         @media (max-width: 820px) {
@@ -407,6 +455,10 @@ def vibe_ui():
             </div>
 
             <section class="recommendation neutral" id="recommendation-card" aria-label="AI recommendation">
+              <div class="direction-toggle" aria-label="Transfer direction">
+                <button class="dir-button active" type="button" data-direction="usd_to_inr">USD → INR</button>
+                <button class="dir-button" type="button" data-direction="inr_to_usd">INR → USD</button>
+              </div>
               <p class="recommendation-label">Recommendation</p>
               <p class="recommendation-verdict" id="recommendation-verdict">Loading...</p>
               <p class="recommendation-reasoning" id="recommendation-reasoning"></p>
@@ -415,8 +467,12 @@ def vibe_ui():
 
           <section class="chart-section" aria-label="USD to INR history">
             <div class="chart-head">
-              <h2 class="chart-title">Last 30 days</h2>
+              <h2 class="chart-title" id="chart-title">Last 30 days</h2>
               <p class="chart-note" id="chart-note">Loading history...</p>
+            </div>
+            <div class="range-controls" aria-label="History range">
+              <button class="range-button active" type="button" data-days="30" data-label="Last 30 days">30 days</button>
+              <button class="range-button" type="button" data-days="183" data-label="Last 6 months">6 months</button>
             </div>
             <div class="chart-wrap">
               <canvas id="history-chart"></canvas>
@@ -436,12 +492,21 @@ def vibe_ui():
         const messageEl = document.querySelector("#message");
         const metaEl = document.querySelector("#meta");
         const refreshButton = document.querySelector("#refresh");
+        const chartTitleEl = document.querySelector("#chart-title");
         const chartNoteEl = document.querySelector("#chart-note");
         const historyChartEl = document.querySelector("#history-chart");
+        const rangeButtons = document.querySelectorAll(".range-button");
+        const dirButtons = document.querySelectorAll(".dir-button");
         const recommendationCardEl = document.querySelector("#recommendation-card");
         const recommendationVerdictEl = document.querySelector("#recommendation-verdict");
         const recommendationReasoningEl = document.querySelector("#recommendation-reasoning");
         let historyChart;
+        let historyRequestId = 0;
+        let selectedHistoryRange = {
+          days: 30,
+          label: "Last 30 days",
+        };
+        let selectedDirection = "usd_to_inr";
 
         async function loadVibe() {
           const response = await fetch("/vibe");
@@ -471,7 +536,7 @@ def vibe_ui():
         }
 
         async function loadRecommendation() {
-          const response = await fetch("/api/rates/recommend");
+          const response = await fetch(`/api/rates/recommend?direction=${selectedDirection}`);
           if (!response.ok) {
             throw new Error("Could not load recommendation");
           }
@@ -482,9 +547,16 @@ def vibe_ui():
           recommendationReasoningEl.textContent = recommendation.reasoning;
         }
 
-        async function loadHistory() {
-          const response = await fetch("/api/rates/history?days=30");
+        async function loadHistory(days = selectedHistoryRange.days, label = selectedHistoryRange.label) {
+          const requestId = historyRequestId + 1;
+          historyRequestId = requestId;
+          const response = await fetch(`/api/rates/history?days=${days}`);
           const history = await response.json();
+
+          if (requestId !== historyRequestId) {
+            return;
+          }
+
           const labels = history.map((row) =>
             new Date(row.fetched_at).toLocaleDateString(undefined, {
               month: "short",
@@ -493,9 +565,22 @@ def vibe_ui():
           );
           const rates = history.map((row) => Number(row.rate));
 
-          chartNoteEl.textContent = history.length
-            ? `${history.length} data points`
-            : "No 30-day history available";
+          chartTitleEl.textContent = label;
+          if (history.length) {
+            const firstDate = new Date(history[0].fetched_at).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            });
+            const lastDate = new Date(history[history.length - 1].fetched_at).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            });
+            chartNoteEl.textContent = `${history.length} data points, ${firstDate} to ${lastDate}`;
+          } else {
+            chartNoteEl.textContent = `No ${label.toLowerCase()} history available`;
+          }
 
           if (historyChart) {
             historyChart.data.labels = labels;
@@ -566,6 +651,41 @@ def vibe_ui():
             },
           });
         }
+
+        dirButtons.forEach((button) => {
+          button.addEventListener("click", async () => {
+            selectedDirection = button.dataset.direction;
+            dirButtons.forEach((b) => b.classList.toggle("active", b === button));
+            recommendationVerdictEl.textContent = "Loading...";
+            recommendationReasoningEl.textContent = "";
+            recommendationCardEl.className = "recommendation neutral";
+            try {
+              await loadRecommendation();
+            } catch {
+              recommendationVerdictEl.textContent = "Unavailable";
+            }
+          });
+        });
+
+        rangeButtons.forEach((button) => {
+          button.addEventListener("click", async () => {
+            selectedHistoryRange = {
+              days: Number(button.dataset.days),
+              label: button.dataset.label,
+            };
+
+            rangeButtons.forEach((rangeButton) => {
+              rangeButton.classList.toggle("active", rangeButton === button);
+            });
+
+            chartNoteEl.textContent = "Loading history...";
+            try {
+              await loadHistory();
+            } catch {
+              chartNoteEl.textContent = "History unavailable";
+            }
+          });
+        });
 
         refreshButton.addEventListener("click", async () => {
           refreshButton.disabled = true;
