@@ -1,13 +1,26 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.responses import HTMLResponse
 from app.api.rates import router as rates_router
 from app.core.db import engine, Base, get_db
 from app.models.models import ExchangeRate, RateAlert, Recommendation
+from app.services.scheduler import start_scheduler
 from sqlalchemy.orm import Session
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = start_scheduler()
+    try:
+        yield
+    finally:
+        scheduler.shutdown()
+
+
+app = FastAPI(lifespan=lifespan)
 app.include_router(rates_router)
 
 def get_rate_vibe(db: Session):
