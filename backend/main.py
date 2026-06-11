@@ -18,15 +18,23 @@ Base.metadata.create_all(bind=engine)
 async def lifespan(app: FastAPI):
     db = next(get_db())
     try:
-        start_date = "2026-01-01"
+        desired_start = "2026-01-01"
         end_date = str(date.today())
 
+        earliest = db.query(func.min(ExchangeRate.fetched_at)).scalar()
         latest = db.query(func.max(ExchangeRate.fetched_at)).scalar()
-        if latest:
-            start_date = str((latest + timedelta(days=1)).date())
 
-        if start_date <= end_date:
-            await backfill_rates(db, start_date, end_date)
+        # Fill missing history before our earliest record
+        if not earliest or str(earliest.date()) > desired_start:
+            backfill_end = str((earliest.date() - timedelta(days=1)) if earliest else date.today())
+            if desired_start <= backfill_end:
+                await backfill_rates(db, desired_start, backfill_end)
+
+        # Fill any gap between our latest record and today
+        if latest:
+            gap_start = str((latest.date() + timedelta(days=1)))
+            if gap_start <= end_date:
+                await backfill_rates(db, gap_start, end_date)
     finally:
         db.close()
 
