@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import HTMLResponse
+from sqlalchemy import func
 from app.api.rates import router as rates_router
 from app.core.db import engine, Base, get_db
 from app.models.models import ExchangeRate, RateAlert, Recommendation
@@ -17,10 +18,14 @@ Base.metadata.create_all(bind=engine)
 async def lifespan(app: FastAPI):
     db = next(get_db())
     try:
-        is_empty = db.query(ExchangeRate).first() is None
-        if is_empty:
-            start_date = str(date.today() - timedelta(days=183))
-            end_date = str(date.today())
+        start_date = "2026-01-01"
+        end_date = str(date.today())
+
+        latest = db.query(func.max(ExchangeRate.fetched_at)).scalar()
+        if latest:
+            start_date = str((latest + timedelta(days=1)).date())
+
+        if start_date <= end_date:
             await backfill_rates(db, start_date, end_date)
     finally:
         db.close()
