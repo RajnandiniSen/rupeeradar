@@ -8,7 +8,7 @@ from app.services.forex import backfill_rates, fetch_and_store_rate
 from app.services.llm import get_recommendation
 from app.services.news import fetch_headlines
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 router = APIRouter(prefix="/api/rates")
 
@@ -18,7 +18,11 @@ async def refresh_rate(db: Session = Depends(get_db)):
     return await fetch_and_store_rate(db)
 
 @router.post("/backfill")
-async def backfill(start_date: str, end_date: str, db: Session = Depends(get_db)):
+async def backfill(
+    start_date: str = "2026-01-01",
+    end_date: str = str(date.today()),
+    db: Session = Depends(get_db),
+):
     return await backfill_rates(db, start_date, end_date)
 
 

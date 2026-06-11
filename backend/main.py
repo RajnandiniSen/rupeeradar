@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
+from datetime import date, timedelta
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import HTMLResponse
 from app.api.rates import router as rates_router
 from app.core.db import engine, Base, get_db
 from app.models.models import ExchangeRate, RateAlert, Recommendation
+from app.services.forex import backfill_rates
 from app.services.scheduler import start_scheduler
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,16 @@ Base.metadata.create_all(bind=engine)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    db = next(get_db())
+    try:
+        is_empty = db.query(ExchangeRate).first() is None
+        if is_empty:
+            start_date = str(date.today() - timedelta(days=183))
+            end_date = str(date.today())
+            await backfill_rates(db, start_date, end_date)
+    finally:
+        db.close()
+
     scheduler = start_scheduler()
     try:
         yield
