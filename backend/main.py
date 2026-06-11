@@ -171,6 +171,39 @@ def vibe_ui():
           font-size: 0.95rem;
         }
 
+        .chart-section {
+          margin-top: 30px;
+          padding-top: 24px;
+          border-top: 1px solid rgba(35, 50, 44, 0.14);
+        }
+
+        .chart-head {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 14px;
+        }
+
+        .chart-title {
+          margin: 0;
+          font-size: 1rem;
+          font-weight: 850;
+        }
+
+        .chart-note {
+          margin: 0;
+          color: var(--muted);
+          font-size: 0.9rem;
+          font-weight: 700;
+        }
+
+        .chart-wrap {
+          position: relative;
+          height: 260px;
+          width: 100%;
+        }
+
         .chips {
           display: flex;
           flex-wrap: wrap;
@@ -207,6 +240,12 @@ def vibe_ui():
           button {
             width: 100%;
           }
+
+          .chart-head {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 4px;
+          }
         }
       </style>
     </head>
@@ -224,6 +263,16 @@ def vibe_ui():
         <p class="message" id="message">Loading the latest vibe...</p>
         <p class="meta" id="meta"></p>
 
+        <section class="chart-section" aria-label="USD to INR history">
+          <div class="chart-head">
+            <h2 class="chart-title">Last 30 days</h2>
+            <p class="chart-note" id="chart-note">Loading history...</p>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="history-chart"></canvas>
+          </div>
+        </section>
+
         <div class="chips" aria-label="Vibe scale">
           <span class="chip">82+ decent</span>
           <span class="chip">84+ strong</span>
@@ -231,11 +280,15 @@ def vibe_ui():
         </div>
       </main>
 
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <script>
         const rateEl = document.querySelector("#rate");
         const messageEl = document.querySelector("#message");
         const metaEl = document.querySelector("#meta");
         const refreshButton = document.querySelector("#refresh");
+        const chartNoteEl = document.querySelector("#chart-note");
+        const historyChartEl = document.querySelector("#history-chart");
+        let historyChart;
 
         async function loadVibe() {
           const response = await fetch("/vibe");
@@ -248,6 +301,91 @@ def vibe_ui():
             : "No saved rate yet.";
         }
 
+        async function loadHistory() {
+          const response = await fetch("/api/rates/history?days=30");
+          const history = await response.json();
+          const labels = history.map((row) =>
+            new Date(row.fetched_at).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })
+          );
+          const rates = history.map((row) => Number(row.rate));
+
+          chartNoteEl.textContent = history.length
+            ? `${history.length} saved points`
+            : "No saved history yet";
+
+          if (historyChart) {
+            historyChart.data.labels = labels;
+            historyChart.data.datasets[0].data = rates;
+            historyChart.update();
+            return;
+          }
+
+          historyChart = new Chart(historyChartEl, {
+            type: "line",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "USD/INR",
+                  data: rates,
+                  borderColor: "#175f43",
+                  backgroundColor: "rgba(23, 95, 67, 0.12)",
+                  borderWidth: 3,
+                  pointBackgroundColor: "#f9c66a",
+                  pointBorderColor: "#175f43",
+                  pointRadius: 4,
+                  pointHoverRadius: 6,
+                  tension: 0.28,
+                  fill: true,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: {
+                intersect: false,
+                mode: "index",
+              },
+              plugins: {
+                legend: {
+                  display: false,
+                },
+                tooltip: {
+                  callbacks: {
+                    label: (context) => `USD/INR ${Number(context.parsed.y).toFixed(2)}`,
+                  },
+                },
+              },
+              scales: {
+                x: {
+                  grid: {
+                    display: false,
+                  },
+                  ticks: {
+                    color: "#60736a",
+                    maxRotation: 0,
+                    autoSkip: true,
+                    maxTicksLimit: 6,
+                  },
+                },
+                y: {
+                  ticks: {
+                    color: "#60736a",
+                    callback: (value) => Number(value).toFixed(1),
+                  },
+                  grid: {
+                    color: "rgba(35, 50, 44, 0.1)",
+                  },
+                },
+              },
+            },
+          });
+        }
+
         refreshButton.addEventListener("click", async () => {
           refreshButton.disabled = true;
           refreshButton.textContent = "Refreshing...";
@@ -255,6 +393,7 @@ def vibe_ui():
           try {
             await fetch("/api/rates/refresh", { method: "POST" });
             await loadVibe();
+            await loadHistory();
           } finally {
             refreshButton.disabled = false;
             refreshButton.textContent = "Refresh rate";
@@ -265,6 +404,10 @@ def vibe_ui():
           rateEl.textContent = "--";
           messageEl.textContent = "Could not load the vibe. Check that the backend and database are running.";
           metaEl.textContent = "";
+        });
+
+        loadHistory().catch(() => {
+          chartNoteEl.textContent = "Could not load history.";
         });
       </script>
     </body>
