@@ -1,0 +1,10 @@
+fastapi 
+uvicorn
+sqlalchemy 
+psycopg2-binary 
+httpx 
+apscheduler 
+pydantic-settings 
+anthropic 
+python-dotenv 
+groq
